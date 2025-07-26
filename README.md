@@ -1,108 +1,101 @@
 --[[
-Script Local para Roblox: Voo com Interface GUI
-Como usar:
-1. Execute este script em um LocalScript (StarterPlayerScripts, por exemplo).
-2. Um botão aparecerá na tela. Clique para ativar/desativar o voo.
+Script de Voo Local com GUI para Roblox
+Coloque como LocalScript em StarterPlayerScripts.
+Use W, A, S, D para mover, Espaço para subir, Shift para descer.
 --]]
 
--- Configuração da Interface
 local player = game.Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+local RS = game:GetService("RunService")
 
--- Cria o ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FlyGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player:WaitForChild("PlayerGui")
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "FlyGui"
+gui.Parent = player.PlayerGui
 
--- Cria o botão
-local button = Instance.new("TextButton")
-button.Size = UDim2.new(0, 120, 0, 40)
-button.Position = UDim2.new(0, 20, 0, 20)
-button.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
-button.Text = "Ativar Voo"
-button.TextSize = 18
-button.TextColor3 = Color3.new(1, 1, 1)
-button.Parent = screenGui
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0,150,0,40)
+btn.Position = UDim2.new(0, 30, 0, 40)
+btn.BackgroundColor3 = Color3.fromRGB(60,120,255)
+btn.TextColor3 = Color3.new(1,1,1)
+btn.Text = "Ativar Voo"
+btn.Parent = gui
 
--- Variáveis de voo
+-- Voo
 local flying = false
-local flySpeed = 50
-local bodyGyro = nil
-local bodyVelocity = nil
+local speed = 50
+local bv, bg
+local control = {F = 0, B = 0, L = 0, R = 0, U = 0, D = 0}
 
--- Função para ativar/desativar voo
-local function setFlying(state)
-    local char = player.Character or player.CharacterAdded:Wait()
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not humanoid then return end
+local function fly()
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
 
-    if state and not flying then
-        flying = true
-        button.Text = "Desativar Voo"
+    bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+    bv.Velocity = Vector3.new(0,0,0)
+    bv.P = 1000
+    bv.Parent = root
 
-        -- Cria BodyGyro e BodyVelocity
-        bodyGyro = Instance.new("BodyGyro")
-        bodyGyro.P = 9e4
-        bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-        bodyGyro.CFrame = hrp.CFrame
-        bodyGyro.Parent = hrp
+    bg = Instance.new("BodyGyro")
+    bg.MaxTorque = Vector3.new(9e9,9e9,9e9)
+    bg.P = 1e4
+    bg.CFrame = root.CFrame
+    bg.Parent = root
 
-        bodyVelocity = Instance.new("BodyVelocity")
-        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-        bodyVelocity.Parent = hrp
-
-        -- Loop de voo
-        spawn(function()
-            while flying and player.Character and humanoid.Health > 0 do
-                local cam = workspace.CurrentCamera
-                local moveDir = Vector3.new()
-                if userInput:IsKeyDown(Enum.KeyCode.W) then
-                    moveDir = moveDir + cam.CFrame.LookVector
-                end
-                if userInput:IsKeyDown(Enum.KeyCode.S) then
-                    moveDir = moveDir - cam.CFrame.LookVector
-                end
-                if userInput:IsKeyDown(Enum.KeyCode.A) then
-                    moveDir = moveDir - cam.CFrame.RightVector
-                end
-                if userInput:IsKeyDown(Enum.KeyCode.D) then
-                    moveDir = moveDir + cam.CFrame.RightVector
-                end
-                if userInput:IsKeyDown(Enum.KeyCode.Space) then
-                    moveDir = moveDir + cam.CFrame.UpVector
-                end
-                if userInput:IsKeyDown(Enum.KeyCode.LeftControl) or userInput:IsKeyDown(Enum.KeyCode.LeftShift) then
-                    moveDir = moveDir - cam.CFrame.UpVector
-                end
-
-                if moveDir.Magnitude > 0 then
-                    moveDir = moveDir.Unit
-                end
-                bodyVelocity.Velocity = moveDir * flySpeed
-                bodyGyro.CFrame = cam.CFrame
-                wait()
-            end
-        end)
-
-    elseif not state and flying then
-        flying = false
-        button.Text = "Ativar Voo"
-        if bodyGyro then bodyGyro:Destroy() end
-        if bodyVelocity then bodyVelocity:Destroy() end
-    end
+    local flyConn
+    flyConn = RS.RenderStepped:Connect(function()
+        if not flying then flyConn:Disconnect() return end
+        local cam = workspace.CurrentCamera
+        local move = Vector3.new(
+            (control.R - control.L),
+            (control.U - control.D),
+            (control.F - control.B)
+        )
+        if move.Magnitude > 0 then
+            move = (cam.CFrame:VectorToWorldSpace(move.Unit)) * speed
+        end
+        bv.Velocity = move
+        bg.CFrame = cam.CFrame
+    end)
 end
 
--- Input de teclado para movimento
-local userInput = game:GetService("UserInputService")
+local function stopFlying()
+    if bv then bv:Destroy() bv = nil end
+    if bg then bg:Destroy() bg = nil end
+end
 
--- Clique do botão
-button.MouseButton1Click:Connect(function()
-    setFlying(not flying)
+btn.MouseButton1Click:Connect(function()
+    flying = not flying
+    btn.Text = flying and "Desativar Voo" or "Ativar Voo"
+    if flying then
+        fly()
+    else
+        stopFlying()
+    end
 end)
 
--- Se morrer, desativa voo
-player.CharacterAdded:Connect(function(char)
-    setFlying(false)
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.W then control.F = 1 end
+    if input.KeyCode == Enum.KeyCode.S then control.B = 1 end
+    if input.KeyCode == Enum.KeyCode.A then control.L = 1 end
+    if input.KeyCode == Enum.KeyCode.D then control.R = 1 end
+    if input.KeyCode == Enum.KeyCode.Space then control.U = 1 end
+    if input.KeyCode == Enum.KeyCode.LeftShift then control.D = 1 end
+end)
+UIS.InputEnded:Connect(function(input, gpe)
+    if input.KeyCode == Enum.KeyCode.W then control.F = 0 end
+    if input.KeyCode == Enum.KeyCode.S then control.B = 0 end
+    if input.KeyCode == Enum.KeyCode.A then control.L = 0 end
+    if input.KeyCode == Enum.KeyCode.D then control.R = 0 end
+    if input.KeyCode == Enum.KeyCode.Space then control.U = 0 end
+    if input.KeyCode == Enum.KeyCode.LeftShift then control.D = 0 end
+end)
+
+player.CharacterAdded:Connect(function()
+    flying = false
+    btn.Text = "Ativar Voo"
+    stopFlying()
 end)
